@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/RiccardoDalFiume/bayrol-ha-rdf#readme
+    about: Check setup and usage instructions before opening an issue.

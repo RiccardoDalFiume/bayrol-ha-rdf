@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest an improvement for the Bayrol integration
+title: "[FEATURE] "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Clear, concrete requests help prioritization.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: I cannot automate alerts when pH remains out of range.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe what you would like to happen.
+      placeholder: Add a binary sensor that tracks prolonged out-of-range pH.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workaround or alternative you evaluated.
+      placeholder: I currently use a template sensor, but it is brittle.
+  - type: dropdown
+    id: bayrol-device
+    attributes:
+      label: Bayrol device model
+      options:
+        - Bayrol Automatic Salt 5 (AS5)
+        - Bayrol Automatic Salt 7 (AS7)
+        - Bayrol Automatic Cl-pH
+        - Pool Manager 5 Chlorine
+        - Other / Unknown
+    validations:
+      required: true
+  - type: input
+    id: install-method
+    attributes:
+      label: Installation method
+      description: How did you install this integration?
+      placeholder: HACS / manual / other
+    validations:
+      required: true
+  - type: input
+    id: integration-version
+    attributes:
+      label: Integration version
+      description: Version currently installed in Home Assistant.
+      placeholder: "e.g. 1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add mockups, logs, screenshots, or examples.

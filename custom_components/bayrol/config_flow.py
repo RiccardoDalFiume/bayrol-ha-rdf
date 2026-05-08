@@ -6,7 +6,6 @@ import aiohttp
 import json
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -26,9 +25,7 @@ class BayrolConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
         errors = {}
 
@@ -58,12 +55,8 @@ class BayrolConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(BAYROL_APP_LINK_CODE): vol.All(
-                        str, vol.Length(min=8, max=8)
-                    ),
-                    vol.Required(BAYROL_DEVICE_TYPE): vol.In(
-                        ["Automatic SALT", "Automatic Cl-pH", "PM5 Chlorine"]
-                    ),
+                    vol.Required(BAYROL_APP_LINK_CODE): vol.All(str, vol.Length(min=8, max=8)),
+                    vol.Required(BAYROL_DEVICE_TYPE): vol.In(["Automatic SALT", "Automatic Cl-pH", "PM5 Chlorine"]),
                 }
             ),
             errors=errors,

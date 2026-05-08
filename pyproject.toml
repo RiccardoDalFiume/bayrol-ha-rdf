@@ -1,0 +1,22 @@
+[project]
+name = "bayrol-ha-rdf"
+version = "1.0.0"
+description = "Bayrol Pool Access integration for Home Assistant"
+requires-python = ">=3.12"
+dependencies = [
+  "paho-mqtt>=1.6.1",
+  "aiohttp>=3.9.0",
+  "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+test = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+]
+lint = [
+  "ruff>=0.6.0",
+]
+
+[tool.ruff]
+line-length = 120

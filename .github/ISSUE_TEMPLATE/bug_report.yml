@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible issue in the Bayrol integration
+title: "[BUG] "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please provide as much detail as possible.
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of the issue.
+      placeholder: The pH value stops updating after Home Assistant restart.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce-steps
+    attributes:
+      label: Steps to reproduce
+      description: List the minimal steps needed to reproduce the behavior.
+      placeholder: |
+        1. Open Home Assistant
+        2. Navigate to Devices and Services
+        3. Reload Bayrol integration
+        4. Observe stale sensor values
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: Sensors should update every time a new MQTT message arrives.
+    validations:
+      required: true
+  - type: dropdown
+    id: bayrol-device
+    attributes:
+      label: Bayrol device model
+      options:
+        - Bayrol Automatic Salt 5 (AS5)
+        - Bayrol Automatic Salt 7 (AS7)
+        - Bayrol Automatic Cl-pH
+        - Pool Manager 5 Chlorine
+        - Other / Unknown
+    validations:
+      required: true
+  - type: input
+    id: install-method
+    attributes:
+      label: Installation method
+      description: How did you install this integration?
+      placeholder: HACS / manual / other
+    validations:
+      required: true
+  - type: input
+    id: integration-version
+    attributes:
+      label: Integration version
+      description: Version currently installed in Home Assistant.
+      placeholder: "e.g. 1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Paste errors from Home Assistant logs or attach screenshots.
+      render: shell
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add any extra details that may help troubleshooting.

@@ -1,0 +1,38 @@
+name: Lint
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ruff:
+    name: "ruff"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: "actions/checkout@v4.2.2"
+
+      - name: Set up Python
+        uses: "actions/setup-python@v5"
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: "astral-sh/setup-uv@v5"
+        with:
+          enable-cache: true
+
+      - name: Sync lint dependencies
+        run: uv sync --frozen --group lint --python 3.12
+
+      - name: Run ruff (lint)
+        run: uv run --python 3.12 ruff check custom_components/ tests/
+
+      - name: Run ruff (format check)
+        run: uv run --python 3.12 ruff format --check custom_components/ tests/

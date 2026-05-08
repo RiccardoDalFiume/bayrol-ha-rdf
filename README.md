@@ -1,9 +1,16 @@
 [![Static Badge](https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge&logo=homeassistantcommunitystore&logoColor=white)](https://github.com/hacs/integration) 
-![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/0xQuantumHome/bayrol-home-hassistant?style=for-the-badge) 
-![GitHub Release Date](https://img.shields.io/github/release-date/0xQuantumHome/bayrol-home-hassistant?style=for-the-badge&label=Latest%20Release) [![GitHub Release](https://img.shields.io/github/v/release/0xQuantumHome/bayrol-home-hassistant?style=for-the-badge)](https://github.com/0xQuantumHome/bayrol-home-hassistant/releases)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge) 
+![GitHub Release Date](https://img.shields.io/github/release-date/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge&label=Latest%20Release) [![GitHub Release](https://img.shields.io/github/v/release/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/releases)
 
 
 # Bayrol Pool Access Integration for Home Assistant
+
+> **Note**: This project is a fork of the original [0xQuantumHome/bayrol-home-hassistant](https://github.com/0xQuantumHome/bayrol-home-hassistant) integration.
+>
+> **Why this fork?**
+> - **Quick & Working Installation**: Provides a rapidly deployable and functional codebase.
+> - **IP Ban Fix**: Overcomes Bayrol server ban issues by strictly aligning the MQTT client logic (Client ID formatting, connection parameters, and TLS logic) with the official web client.
+> - **Multi-Controller Support**: Enables the use of multiple Bayrol controllers simultaneously within the same Home Assistant instance.
 
 This custom integration allows you to monitor your Bayrol Pool Access device in Home Assistant. It uses a direct MQTT connection to the Bayrol Cloud.
 
@@ -14,7 +21,7 @@ This custom integration allows you to monitor your Bayrol Pool Access device in 
 
 ## Tested Devices
 
-- Bayrol Automatic Salt 5 (AS5)
+- Bayrol Automatic SALT (All variants, e.g. AS5, AS7)
 - Bayrol Automatic Cl-pH
 - Pool Manager 5 Chlorine
 
@@ -80,5 +87,29 @@ Click the **CONNECT** button and you should see the messages floating in:
 ## Support
 
 If you encounter any issues or have questions, please open an issue on GitHub.
+
+## Development and CI
+
+The repository includes automated GitHub Actions workflows for validation and maintenance:
+
+- HACS validation (`.github/workflows/validate.yaml`)
+- Home Assistant hassfest validation (`.github/workflows/hassfest.yml`)
+- Python tests with `pytest` (`.github/workflows/tests.yml`)
+- Lint and format checks with `ruff` (`.github/workflows/lint.yml`)
+- Dependency review on pull requests (`.github/workflows/dependency-review.yml`)
+- Automated stale issue/PR management (`.github/workflows/stale.yml`)
+- Draft release notes generation (`.github/workflows/release-drafter.yml`)
+
+You can run the main CI checks locally before opening a pull request:
+
+```bash
+uv venv
+uv sync --group test --group lint
+uv run pytest tests/ -v --tb=short
+uv run ruff check custom_components/ tests/
+uv run ruff format --check custom_components/ tests/
+```
+
+When contributing, open pull requests against `main` to trigger the full CI suite.
 
 
