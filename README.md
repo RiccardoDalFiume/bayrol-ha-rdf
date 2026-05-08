@@ -120,4 +120,14 @@ Set `BAYROL_RUN_LIVE_TESTS=true` to run them locally.
 
 When contributing, open pull requests against `main` to trigger the full CI suite.
 
+### Release process
+
+For maintainers creating GitHub Releases from terminal, see:
+
+- [`docs/releasing-with-gh.md`](docs/releasing-with-gh.md)
+
+The project also includes a reusable Cursor skill for this workflow in:
+
+- [`.cursor/skills/release-with-gh/SKILL.md`](.cursor/skills/release-with-gh/SKILL.md)
+
 
