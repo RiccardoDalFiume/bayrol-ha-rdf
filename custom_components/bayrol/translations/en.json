@@ -1,5 +1,10 @@
 {
   "config": {
+    "error": {
+      "cannot_connect": "Failed to connect to Bayrol service. Please try again.",
+      "invalid_response": "Bayrol service returned an invalid response.",
+      "unknown": "Unexpected error occurred. Please try again."
+    },
     "flow_title": "Bayrol",
     "step": {
       "user": {

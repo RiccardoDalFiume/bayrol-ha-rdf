@@ -22,7 +22,6 @@ from .const import (
     AUTOMATIC_TEXT_TO_MQTT_MAPPING,
     PM5_TEXT_TO_MQTT_MAPPING,
 )
-from .helpers import normalize_entity_id_part
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -108,21 +107,21 @@ async def async_setup_entry(
         for select_type, select_config in SENSOR_TYPES_AUTOMATIC_SALT.items():
             if select_config.get("entity_type") == "select":
                 topic = select_type
-                select = BayrolSelect(config_entry, select_type, select_config, topic)
+                select = BayrolSelect(config_entry, select_type, select_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=select: _handle_select_value(s, v))
                 entities.append(select)
     elif device_type == "Automatic Cl-pH":
         for select_type, select_config in SENSOR_TYPES_AUTOMATIC_CL_PH.items():
             if select_config.get("entity_type") == "select":
                 topic = select_type
-                select = BayrolSelect(config_entry, select_type, select_config, topic)
+                select = BayrolSelect(config_entry, select_type, select_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=select: _handle_select_value(s, v))
                 entities.append(select)
     elif device_type == "PM5 Chlorine":
         for select_type, select_config in SENSOR_TYPES_PM5_CHLORINE.items():
             if select_config.get("entity_type") == "select":
                 topic = select_type
-                select = BayrolSelect(config_entry, select_type, select_config, topic)
+                select = BayrolSelect(config_entry, select_type, select_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=select: _handle_select_value(s, v))
                 entities.append(select)
 
@@ -132,18 +131,17 @@ async def async_setup_entry(
 class BayrolSelect(SelectEntity):
     """Representation of a Bayrol select entity."""
 
-    def __init__(self, config_entry, select_type, select_config, topic):
+    def __init__(self, config_entry, select_type, select_config, topic, mqtt_manager):
         """Initialize the select entity."""
         self._config_entry = config_entry
         self._select_type = select_type
         self._select_config = select_config
         self._state_topic = topic
+        self._mqtt_manager = mqtt_manager
         self._attr_name = select_config.get("name", select_type)
         self._attr_unique_id = f"{config_entry.entry_id}_{select_type}"
-        device_id = normalize_entity_id_part(config_entry.data[BAYROL_DEVICE_ID])
-        name = normalize_entity_id_part(select_config.get("name", select_type))
-        self.entity_id = f"select.bayrol_{device_id}_{name}"
         self._attr_current_option = None
+        self._attr_available = mqtt_manager.is_connected
 
         # Get options from config and convert to strings
         self._attr_options = [str(opt) for opt in select_config.get("options", [])]
@@ -152,6 +150,20 @@ class BayrolSelect(SelectEntity):
         self._mqtt_to_value = {}
         if "mqtt_values" in select_config:
             self._mqtt_to_value = select_config["mqtt_values"]
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to Home Assistant."""
+        self._mqtt_manager.register_availability_callback(self._handle_availability)
+        self._handle_availability(self._mqtt_manager.is_connected)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is removed from Home Assistant."""
+        self._mqtt_manager.unregister_availability_callback(self._handle_availability)
+
+    def _handle_availability(self, is_available: bool) -> None:
+        """Handle MQTT availability updates."""
+        self._attr_available = is_available
+        self.schedule_update_ha_state()
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
@@ -220,7 +232,7 @@ class BayrolSelect(SelectEntity):
         # Publish the new value to the MQTT topic
         topic = f"d02/{self._config_entry.data[BAYROL_DEVICE_ID]}/s/{self._state_topic}"
         payload = f'{{"t":"{self._state_topic}","v":{mqtt_value}}}'
-        self.hass.data[DOMAIN][self._config_entry.entry_id]["mqtt_manager"].client.publish(topic, payload)
+        await self.hass.async_add_executor_job(self._mqtt_manager.publish, topic, payload)
         _LOGGER.debug("Published MQTT message: %s", payload)
 
     @property
@@ -260,7 +272,10 @@ class BayrolSelect(SelectEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Device info."""
+        device_id = self._config_entry.data[BAYROL_DEVICE_ID]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._config_entry.data[BAYROL_DEVICE_ID])},
+            identifiers={(DOMAIN, device_id)},
+            name=f"Bayrol {device_id}",
             manufacturer="Bayrol",
+            model=self._config_entry.data[BAYROL_DEVICE_TYPE],
         )

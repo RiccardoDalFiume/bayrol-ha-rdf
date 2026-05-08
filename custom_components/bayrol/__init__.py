@@ -43,8 +43,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry_data = hass.data[DOMAIN].pop(entry.entry_id)
             mqtt_manager = entry_data.get("mqtt_manager")
             if mqtt_manager:
-                if mqtt_manager.client:
-                    mqtt_manager.client.disconnect()
+                mqtt_manager.stop()
                 if mqtt_manager.thread:
                     mqtt_manager.thread.join(timeout=1.0)
 

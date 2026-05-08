@@ -20,7 +20,6 @@ from .const import (
     BAYROL_DEVICE_ID,
     BAYROL_DEVICE_TYPE,
 )
-from .helpers import normalize_entity_id_part
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,21 +129,21 @@ async def async_setup_entry(
         for sensor_type, sensor_config in SENSOR_TYPES_AUTOMATIC_SALT.items():
             if sensor_config.get("entity_type") != "select":  # Skip select entities
                 topic = sensor_type
-                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic)
+                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=sensor: _handle_sensor_value(s, v))
                 entities.append(sensor)
     elif device_type == "Automatic Cl-pH":
         for sensor_type, sensor_config in SENSOR_TYPES_AUTOMATIC_CL_PH.items():
             if sensor_config.get("entity_type") != "select":  # Skip select entities
                 topic = sensor_type
-                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic)
+                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=sensor: _handle_sensor_value(s, v))
                 entities.append(sensor)
     elif device_type == "PM5 Chlorine":
         for sensor_type, sensor_config in SENSOR_TYPES_PM5_CHLORINE.items():
             if sensor_config.get("entity_type") != "select":  # Skip select entities
                 topic = sensor_type
-                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic)
+                sensor = BayrolSensor(config_entry, sensor_type, sensor_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=sensor: _handle_sensor_value(s, v))
                 entities.append(sensor)
 
@@ -154,37 +153,49 @@ async def async_setup_entry(
 class BayrolSensor(SensorEntity):
     """Representation of a Bayrol sensor."""
 
-    def __init__(self, config_entry, sensor_type, sensor_config, topic):
+    def __init__(self, config_entry, sensor_type, sensor_config, topic, mqtt_manager):
         """Initialize the sensor."""
         self._config_entry = config_entry
         self._sensor_type = sensor_type
         self._sensor_config = sensor_config
         self._state_topic = topic
+        self._mqtt_manager = mqtt_manager
         self._attr_name = sensor_config.get("name", sensor_type)
         self._attr_device_class = sensor_config.get("device_class")
         self._attr_state_class = sensor_config.get("state_class")
         self._attr_native_unit_of_measurement = sensor_config.get("unit_of_measurement")
         self._attr_unique_id = f"{config_entry.entry_id}_{sensor_type}"
-        device_id = normalize_entity_id_part(config_entry.data[BAYROL_DEVICE_ID])
-        name = normalize_entity_id_part(sensor_config.get("name", sensor_type))
-        self.entity_id = f"sensor.bayrol_{device_id}_{name}"
         coefficient = sensor_config.get("coefficient")
         if coefficient == 1:
             self._attr_suggested_display_precision = 0
         elif coefficient == 10:
             self._attr_suggested_display_precision = 1
         elif coefficient == 100:
-            self._attr_display_precision = 2
+            self._attr_suggested_display_precision = 2
+        self._attr_available = mqtt_manager.is_connected
         self._attr_native_value = None
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to Home Assistant."""
-        pass
+        self._mqtt_manager.register_availability_callback(self._handle_availability)
+        self._handle_availability(self._mqtt_manager.is_connected)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is removed from Home Assistant."""
+        self._mqtt_manager.unregister_availability_callback(self._handle_availability)
+
+    def _handle_availability(self, is_available: bool) -> None:
+        """Handle MQTT availability updates."""
+        self._attr_available = is_available
+        self.schedule_update_ha_state()
 
     @property
     def device_info(self) -> DeviceInfo:
         """Device info."""
+        device_id = self._config_entry.data[BAYROL_DEVICE_ID]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._config_entry.data[BAYROL_DEVICE_ID])},
+            identifiers={(DOMAIN, device_id)},
+            name=f"Bayrol {device_id}",
             manufacturer="Bayrol",
+            model=self._config_entry.data[BAYROL_DEVICE_TYPE],
         )

@@ -42,8 +42,26 @@ class BayrolMQTTManager:
         self.client = None
         self.thread = None
         self._subscribers = {}
+        self._availability_callbacks = set()
+        self._is_connected = False
+        self._stop_event = threading.Event()
         # Generate a client ID matching the JS format: 'user_' + 8 hex chars
         self._client_id = "user_" + format(random.getrandbits(32), "08x")
+
+    @property
+    def is_connected(self) -> bool:
+        """Return whether the MQTT client is currently connected."""
+        return self._is_connected
+
+    @property
+    def subscribed_topics(self) -> set[str]:
+        """Return registered topic identifiers."""
+        return set(self._subscribers.keys())
+
+    @property
+    def subscriber_count(self) -> int:
+        """Return number of registered subscribers."""
+        return len(self._subscribers)
 
     def subscribe(self, topic: str, callback):
         """Subscribe to a topic with a callback."""
@@ -57,9 +75,27 @@ class BayrolMQTTManager:
             self.client.publish(request_topic)
             _LOGGER.debug("Requested initial value via %s", request_topic)
 
+    def register_availability_callback(self, callback) -> None:
+        """Register a callback for MQTT availability changes."""
+        self._availability_callbacks.add(callback)
+
+    def unregister_availability_callback(self, callback) -> None:
+        """Unregister a callback for MQTT availability changes."""
+        self._availability_callbacks.discard(callback)
+
+    def _set_connected(self, connected: bool) -> None:
+        """Update connection status and notify listeners in HA loop."""
+        if self._is_connected == connected:
+            return
+
+        self._is_connected = connected
+        for callback in list(self._availability_callbacks):
+            self.hass.loop.call_soon_threadsafe(callback, connected)
+
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         """Handle the connection to the MQTT broker."""
         if reason_code == 0:
+            self._set_connected(True)
             _LOGGER.info("Connected to Bayrol MQTT broker (client_id=%s)", self._client_id)
             # Subscribe to device status topic first (like the JS client)
             status_topic = f"d02/{self.device_id}/v/1"
@@ -75,6 +111,7 @@ class BayrolMQTTManager:
                 client.publish(req_topic)
                 _LOGGER.debug("Re-subscribed to %s, requested via %s", sub_topic, req_topic)
         else:
+            self._set_connected(False)
             _LOGGER.error(
                 "Failed to connect to MQTT broker, reason code: %s",
                 reason_code,
@@ -102,6 +139,7 @@ class BayrolMQTTManager:
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         """Handle disconnection from the MQTT broker."""
+        self._set_connected(False)
         if reason_code == 0:
             _LOGGER.info("Disconnected from Bayrol MQTT broker (clean)")
         else:
@@ -130,7 +168,7 @@ class BayrolMQTTManager:
 
         # Use loop_start() + manual reconnect loop instead of loop_forever()
         # to respect the 5-second reconnect period like the JS client
-        while True:
+        while not self._stop_event.is_set():
             try:
                 _LOGGER.debug(
                     "Connecting to %s:%s as %s",
@@ -140,14 +178,17 @@ class BayrolMQTTManager:
                 )
                 self.client.connect(BAYROL_HOST, BAYROL_PORT, 60)
                 self.client.loop_forever()
-                # loop_forever() only returns when disconnect() is called
-                # or on error. If clean disconnect, exit the loop.
+                if self._stop_event.is_set():
+                    _LOGGER.debug("MQTT manager stop requested, exiting loop")
+                    break
                 if not self.client.is_connected():
                     _LOGGER.info("MQTT loop ended, waiting before reconnect...")
                     time.sleep(RECONNECT_PERIOD)
                 else:
                     break
             except Exception as e:
+                if self._stop_event.is_set():
+                    break
                 _LOGGER.error(
                     "MQTT connect() failed: %s. Retrying in %s seconds.",
                     e,
@@ -159,5 +200,20 @@ class BayrolMQTTManager:
         """Start the MQTT manager."""
         _LOGGER.debug("Starting MQTT manager (client_id=%s)", self._client_id)
         if not self.thread:
+            self._stop_event.clear()
             self.thread = threading.Thread(target=self._start, daemon=True)
             self.thread.start()
+
+    def stop(self):
+        """Stop the MQTT manager thread and disconnect the client."""
+        self._stop_event.set()
+        if self.client:
+            self.client.disconnect()
+
+    def publish(self, topic: str, payload: str):
+        """Publish an MQTT message through the managed client."""
+        if not self.client or not self.client.is_connected():
+            _LOGGER.warning("Cannot publish while MQTT is disconnected: topic=%s", topic)
+            return None
+
+        return self.client.publish(topic, payload)

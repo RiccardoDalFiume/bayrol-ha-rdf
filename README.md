@@ -35,8 +35,12 @@ This custom integration allows you to monitor your Bayrol Pool Access device in 
 
 ### Manual Installation
 
-1. Copy the `custom_components/bayrol_cloud` directory to your Home Assistant's `custom_components` directory
+1. Copy the `custom_components/bayrol` directory to your Home Assistant's `custom_components` directory
 2. Restart Home Assistant
+
+### Compatibility
+
+- Minimum supported Home Assistant version: `2025.1.0`
 
 ## Configuration
 
@@ -87,6 +91,26 @@ Click the **CONNECT** button and you should see the messages floating in:
 ## Support
 
 If you encounter any issues or have questions, please open an issue on GitHub.
+
+## Troubleshooting
+
+### Enable debug logging
+
+Add the following to your Home Assistant `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.bayrol: debug
+```
+
+Restart Home Assistant and reproduce the issue before collecting logs.
+
+### Common issues
+
+- **Cannot connect during setup**: verify the App Link Code is valid and not expired.
+- **Entities unavailable**: check internet connectivity and Bayrol cloud status, then reload the integration.
+- **No incoming MQTT values**: follow the MQTT Explorer section in this README to validate credentials and topics.
 
 ## Development and CI
 
