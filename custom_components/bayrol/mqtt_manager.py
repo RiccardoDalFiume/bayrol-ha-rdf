@@ -57,9 +57,9 @@ class BayrolMQTTManager:
             self.client.publish(request_topic)
             _LOGGER.debug("Requested initial value via %s", request_topic)
 
-    def _on_connect(self, client, userdata, flags, rc):
+    def _on_connect(self, client, userdata, flags, reason_code, properties):
         """Handle the connection to the MQTT broker."""
-        if rc == 0:
+        if reason_code == 0:
             _LOGGER.info("Connected to Bayrol MQTT broker (client_id=%s)", self._client_id)
             # Subscribe to device status topic first (like the JS client)
             status_topic = f"d02/{self.device_id}/v/1"
@@ -75,7 +75,10 @@ class BayrolMQTTManager:
                 client.publish(req_topic)
                 _LOGGER.debug("Re-subscribed to %s, requested via %s", sub_topic, req_topic)
         else:
-            _LOGGER.error("Failed to connect to MQTT broker, result code: %s", rc)
+            _LOGGER.error(
+                "Failed to connect to MQTT broker, reason code: %s",
+                reason_code,
+            )
 
     def _on_message(self, client, userdata, msg):
         """Handle the incoming messages from the MQTT broker."""
@@ -97,20 +100,21 @@ class BayrolMQTTManager:
         else:
             _LOGGER.debug("Received message for unregistered topic: %s", msg.topic)
 
-    def _on_disconnect(self, client, userdata, rc):
+    def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         """Handle disconnection from the MQTT broker."""
-        if rc == 0:
+        if reason_code == 0:
             _LOGGER.info("Disconnected from Bayrol MQTT broker (clean)")
         else:
             _LOGGER.warning(
-                "Unexpected disconnection from Bayrol MQTT broker (rc=%s). Will reconnect in %s seconds.",
-                rc,
+                "Unexpected disconnection from Bayrol MQTT broker (reason_code=%s). Will reconnect in %s seconds.",
+                reason_code,
                 RECONNECT_PERIOD,
             )
 
     def _start(self):
         """Start the MQTT manager with reconnect logic matching the JS client."""
         self.client = paho.Client(
+            callback_api_version=paho.CallbackAPIVersion.VERSION2,
             client_id=self._client_id,
             transport="websockets",
         )

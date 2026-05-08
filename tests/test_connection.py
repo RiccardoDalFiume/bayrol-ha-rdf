@@ -32,6 +32,12 @@ RECONNECT_PERIOD = 5  # seconds, matching JS reconnectPeriod: 5000
 # ---------------------------------------------------------------------------
 
 
+def _require_live_tests_enabled():
+    """Skip live tests unless explicitly enabled by environment variable."""
+    if os.getenv("BAYROL_RUN_LIVE_TESTS", "").lower() != "true":
+        pytest.skip("Live MQTT tests are disabled. Set BAYROL_RUN_LIVE_TESTS=true to run them.")
+
+
 async def _fetch_credentials():
     """Retrieve access_token and device_id from the API or .env."""
     access_token = os.getenv("BAYROL_ACCESS_TOKEN")
@@ -96,6 +102,7 @@ def _create_mqtt_client(access_token: str, client_id: str | None = None):
 @pytest.mark.asyncio
 async def test_api_fetch_credentials():
     """Test that the registration API responds correctly."""
+    _require_live_tests_enabled()
     app_link_code = os.getenv("BAYROL_APP_LINK_CODE")
     if not app_link_code:
         pytest.skip("BAYROL_APP_LINK_CODE not set in .env")
@@ -120,6 +127,7 @@ async def test_mqtt_connect_and_receive():
     3. Wait for messages for 10 seconds
     4. Verify that at least 1 message has arrived (device status)
     """
+    _require_live_tests_enabled()
     access_token, device_id = await _fetch_credentials()
 
     connected_event = asyncio.Event()
@@ -183,6 +191,7 @@ async def test_mqtt_subscribe_and_request_topic():
     2. Publish (request) to topic: d02/{serial}/g/{type}.{id}
     3. Wait for the value in the response
     """
+    _require_live_tests_enabled()
     access_token, device_id = await _fetch_credentials()
 
     connected_event = asyncio.Event()

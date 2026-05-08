@@ -7,6 +7,6 @@
   "documentation": "https://github.com/RiccardoDalFiume/bayrol-ha-rdf",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/RiccardoDalFiume/bayrol-ha-rdf/issues",
-  "requirements": ["paho-mqtt>=1.6.1", "aiohttp>=3.9.0"],
+  "requirements": ["paho-mqtt>=2.1.0,<3", "aiohttp>=3.9.0"],
   "version": "1.0.0"
 }

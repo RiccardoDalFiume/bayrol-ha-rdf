@@ -140,7 +140,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
-    { name = "paho-mqtt", specifier = ">=1.6.1" },
+    { name = "paho-mqtt", specifier = ">=2.1.0,<3" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 

@@ -64,7 +64,7 @@ Please note down both 'accessToken' and 'deviceSerial'.
 In MQTT Explorer, enter the connection details as shown below.
 Use your 'accessToken' value as the 'Username'.
 
-<img width="654" height="438" alt="image" src="https://github.com/user-attachments/assets/bef549bb-e917-430b-bd07-79780a355f3d" />
+<img width="654" height="438" alt="image" src="docs/images/mqtt-explorer-step2.png" />
 
 ### Step 3: Add Subscription
 In **MQTT Explorer**, click the **ADVANCED** button and add the following subscription:
@@ -75,13 +75,13 @@ For example, if your `deviceSerial` is `212ABC1-016273`, the subscription will b
 
 d02/212ABC1-016273/v/#
 
-<img width="647" height="196" alt="image" src="https://github.com/user-attachments/assets/e3b17d01-4d21-4ac4-bb28-89ad07a5804d" />
+<img width="647" height="196" alt="image" src="docs/images/mqtt-explorer-step3.png" />
 
 ### Step 4: Connect
 
 Click the **CONNECT** button and you should see the messages floating in:
 
-<img width="587" height="558" alt="image" src="https://github.com/user-attachments/assets/f92df652-5848-40ab-8edb-8250b50be68d" />
+<img width="587" height="558" alt="image" src="docs/images/mqtt-explorer-step4.png" />
 
 
 ## Support
@@ -100,6 +100,11 @@ The repository includes automated GitHub Actions workflows for validation and ma
 - Automated stale issue/PR management (`.github/workflows/stale.yml`)
 - Draft release notes generation (`.github/workflows/release-drafter.yml`)
 
+MQTT dependency policy:
+
+- The integration targets `paho-mqtt>=2.1.0,<3` with callback API VERSION2.
+- This keeps compatibility with current Home Assistant ecosystem and avoids future breakage from deprecated callback API VERSION1.
+
 You can run the main CI checks locally before opening a pull request:
 
 ```bash
@@ -109,6 +114,9 @@ uv run pytest tests/ -v --tb=short
 uv run ruff check custom_components/ tests/
 uv run ruff format --check custom_components/ tests/
 ```
+
+Note: live MQTT integration tests are opt-in and require external connectivity and valid Bayrol credentials.
+Set `BAYROL_RUN_LIVE_TESTS=true` to run them locally.
 
 When contributing, open pull requests against `main` to trigger the full CI suite.
 
