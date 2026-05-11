@@ -1,6 +1,6 @@
 [project]
 name = "bayrol-ha-rdf"
-version = "1.0.0"
+version = "1.1.2"
 description = "Bayrol Pool Access integration for Home Assistant"
 requires-python = ">=3.12"
 dependencies = [
