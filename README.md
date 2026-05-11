@@ -154,6 +154,13 @@ uv run ruff check custom_components/ tests/
 uv run ruff format --check custom_components/ tests/
 ```
 
+Versioning note:
+
+- Before each release, manually update both:
+  - `pyproject.toml` -> `version = "X.Y.Z"`
+  - `custom_components/bayrol/manifest.json` -> `"version": "X.Y.Z"`
+- Ensure the Git tag is `vX.Y.Z` and matches those file versions.
+
 Note: live MQTT integration tests are opt-in and require external connectivity and valid Bayrol credentials.
 Set `BAYROL_RUN_LIVE_TESTS=true` to run them locally.
 

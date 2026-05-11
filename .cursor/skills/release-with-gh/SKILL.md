@@ -23,6 +23,7 @@ Release progress:
 - [ ] Confirm version tag with user
 - [ ] Validate git and gh preflight state
 - [ ] Update local main branch
+- [ ] Manually bump version metadata in `pyproject.toml` and `manifest.json`
 - [ ] Create and push annotated tag
 - [ ] Prepare descriptive release notes
 - [ ] Create or edit GitHub release
@@ -71,7 +72,29 @@ git checkout main
 git pull origin main
 ```
 
-### 4) Create and push tag
+### 4) Manually bump version metadata
+
+Before creating the tag, update both files to the target release version (`vX.Y.Z` without the `v` in files):
+
+```bash
+pyproject.toml -> version = "X.Y.Z"
+custom_components/bayrol/manifest.json -> "version": "X.Y.Z"
+```
+
+Then verify they match:
+
+```bash
+git diff -- pyproject.toml custom_components/bayrol/manifest.json
+```
+
+Commit if files changed:
+
+```bash
+git add pyproject.toml custom_components/bayrol/manifest.json
+git commit -m "Bump version to vX.Y.Z"
+```
+
+### 5) Create and push tag
 
 First verify whether the tag already exists:
 
@@ -86,7 +109,7 @@ git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-### 5) Prepare descriptive release notes
+### 6) Prepare descriptive release notes
 
 Do not rely only on `--generate-notes` when the user asks for a quick user-facing summary.
 
@@ -113,7 +136,7 @@ Use recent commits and changed files as input:
 git log --oneline <previous_tag>..vX.Y.Z
 ```
 
-### 6) Create or edit release
+### 7) Create or edit release
 
 Default create command:
 
@@ -146,7 +169,7 @@ To update existing notes later:
 gh release edit vX.Y.Z --repo RiccardoDalFiume/bayrol-ha-rdf --notes "<updated_notes>"
 ```
 
-### 7) Verify and report
+### 8) Verify and report
 
 Run:
 
