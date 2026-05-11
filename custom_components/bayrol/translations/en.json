@@ -33,14 +33,14 @@
           "optional_controls_policy": "Smart&Easy optional controls"
         }
       }
-    },
-    "selector": {
-      "optional_controls_policy": {
-        "options": {
-          "auto": "Auto (show detected optional controls only)",
-          "show_all": "Show all optional controls",
-          "hide_all": "Hide all optional controls"
-        }
+    }
+  },
+  "selector": {
+    "optional_controls_policy": {
+      "options": {
+        "auto": "Auto (show detected optional controls only)",
+        "show_all": "Show all optional controls",
+        "hide_all": "Hide all optional controls"
       }
     }
   },
