@@ -12,13 +12,17 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.core import callback
 
 from .const import (
     BAYROL_ACCESS_TOKEN,
     BAYROL_APP_LINK_CODE,
     BAYROL_DEVICE_ID,
     BAYROL_DEVICE_TYPE,
+    CONF_OPTIONAL_CONTROLS_POLICY,
     DOMAIN,
+    OPTIONAL_CONTROLS_POLICY_AUTO,
+    OPTIONAL_CONTROLS_POLICY_VALUES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +34,12 @@ class BayrolConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Bayrol."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        """Get options flow."""
+        return BayrolOptionsFlow(config_entry)
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
@@ -82,4 +92,32 @@ class BayrolConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+
+class BayrolOptionsFlow(config_entries.OptionsFlow):
+    """Handle Bayrol options flow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Manage options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_policy = self._config_entry.options.get(
+            CONF_OPTIONAL_CONTROLS_POLICY,
+            OPTIONAL_CONTROLS_POLICY_AUTO,
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_OPTIONAL_CONTROLS_POLICY, default=current_policy): vol.In(
+                        OPTIONAL_CONTROLS_POLICY_VALUES
+                    ),
+                }
+            ),
         )

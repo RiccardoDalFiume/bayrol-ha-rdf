@@ -7,6 +7,13 @@
     },
     "flow_title": "Bayrol",
     "step": {
+      "init": {
+        "title": "Optional controls policy",
+        "description": "Choose how Smart&Easy optional controls are exposed.",
+        "data": {
+          "optional_controls_policy": "Smart&Easy optional controls"
+        }
+      },
       "user": {
         "title": "Connect to Bayrol",
         "description": "Please enter your Bayrol App Link Code.",
@@ -14,6 +21,33 @@
           "bayrol_app_link_code": "App Link Code (A-******)",
           "bayrol_device_type": "Device Type"
         }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optional controls policy",
+        "description": "Choose how Smart&Easy optional controls are exposed.",
+        "data": {
+          "optional_controls_policy": "Smart&Easy optional controls"
+        }
+      }
+    },
+    "selector": {
+      "optional_controls_policy": {
+        "options": {
+          "auto": "Auto (show detected optional controls only)",
+          "show_all": "Show all optional controls",
+          "hide_all": "Hide all optional controls"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "device_online": {
+        "name": "Device Online"
       }
     }
   }

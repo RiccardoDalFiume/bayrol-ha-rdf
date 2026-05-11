@@ -15,6 +15,7 @@ import random
 import ssl
 import time
 import threading
+from collections.abc import Callable
 import paho.mqtt.client as paho
 import json
 
@@ -43,8 +44,12 @@ class BayrolMQTTManager:
         self.thread = None
         self._subscribers = {}
         self._availability_callbacks = set()
+        self._device_online_callbacks: set[Callable[[bool | None], None]] = set()
         self._is_connected = False
+        self._device_online: bool | None = None
         self._stop_event = threading.Event()
+        self._latest_topic_values: dict[str, str] = {}
+        self._unregistered_topic_values: dict[str, str] = {}
         # Generate a client ID matching the JS format: 'user_' + 8 hex chars
         self._client_id = "user_" + format(random.getrandbits(32), "08x")
 
@@ -52,6 +57,11 @@ class BayrolMQTTManager:
     def is_connected(self) -> bool:
         """Return whether the MQTT client is currently connected."""
         return self._is_connected
+
+    @property
+    def device_online(self) -> bool | None:
+        """Return whether the Bayrol device is currently online."""
+        return self._device_online
 
     @property
     def subscribed_topics(self) -> set[str]:
@@ -62,6 +72,16 @@ class BayrolMQTTManager:
     def subscriber_count(self) -> int:
         """Return number of registered subscribers."""
         return len(self._subscribers)
+
+    @property
+    def latest_topic_values(self) -> dict[str, str]:
+        """Return latest known value for each received topic."""
+        return dict(self._latest_topic_values)
+
+    @property
+    def unregistered_topic_values(self) -> dict[str, str]:
+        """Return latest values received for topics without subscriber."""
+        return dict(self._unregistered_topic_values)
 
     def subscribe(self, topic: str, callback):
         """Subscribe to a topic with a callback."""
@@ -83,6 +103,14 @@ class BayrolMQTTManager:
         """Unregister a callback for MQTT availability changes."""
         self._availability_callbacks.discard(callback)
 
+    def register_device_online_callback(self, callback: Callable[[bool | None], None]) -> None:
+        """Register a callback for Bayrol device online/offline changes."""
+        self._device_online_callbacks.add(callback)
+
+    def unregister_device_online_callback(self, callback: Callable[[bool | None], None]) -> None:
+        """Unregister a callback for Bayrol device online/offline changes."""
+        self._device_online_callbacks.discard(callback)
+
     def _set_connected(self, connected: bool) -> None:
         """Update connection status and notify listeners in HA loop."""
         if self._is_connected == connected:
@@ -91,6 +119,15 @@ class BayrolMQTTManager:
         self._is_connected = connected
         for callback in list(self._availability_callbacks):
             self.hass.loop.call_soon_threadsafe(callback, connected)
+
+    def _set_device_online(self, device_online: bool | None) -> None:
+        """Update device online state and notify listeners in HA loop."""
+        if self._device_online == device_online:
+            return
+
+        self._device_online = device_online
+        for callback in list(self._device_online_callbacks):
+            self.hass.loop.call_soon_threadsafe(callback, device_online)
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         """Handle the connection to the MQTT broker."""
@@ -126,20 +163,34 @@ class BayrolMQTTManager:
         topic_parts = msg.topic.split("/")
         topic = topic_parts[-1]
 
+        try:
+            payload = msg.payload.decode()
+            value = json.loads(payload)["v"]
+            value_str = str(value)
+            self._latest_topic_values[topic] = value_str
+        except Exception as e:
+            _LOGGER.error("Invalid payload for %s: %s", msg.topic, e)
+            return
+
+        if topic == "1":
+            if value_str == "17.4":
+                self._set_device_online(True)
+            elif value_str == "17.0":
+                self._set_device_online(False)
+            else:
+                _LOGGER.debug("Unknown Bayrol device status value on topic 1: %s", value_str)
+
         if topic in self._subscribers:
-            try:
-                payload = msg.payload
-                value = json.loads(payload)["v"]
-                # Schedule the callback in the event loop
-                self.hass.loop.call_soon_threadsafe(lambda: self._subscribers[topic](value))
-            except Exception as e:
-                _LOGGER.error("Invalid payload for %s: %s", msg.topic, e)
+            # Schedule the callback in the event loop
+            self.hass.loop.call_soon_threadsafe(lambda: self._subscribers[topic](value))
         else:
+            self._unregistered_topic_values[topic] = value_str
             _LOGGER.debug("Received message for unregistered topic: %s", msg.topic)
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         """Handle disconnection from the MQTT broker."""
         self._set_connected(False)
+        self._set_device_online(False)
         if reason_code == 0:
             _LOGGER.info("Disconnected from Bayrol MQTT broker (clean)")
         else:

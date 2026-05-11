@@ -11,13 +11,16 @@ Behavior is exactly aligned to the official JS client (DeviceDriver.js):
 
 import os
 import random
-import pytest
-import aiohttp
+import re
 import json
 import logging
 import asyncio
 import ssl
+from pathlib import Path
+
+import aiohttp
 import paho.mqtt.client as paho
+import pytest
 
 logging.basicConfig(level=logging.DEBUG)
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +28,135 @@ _LOGGER = logging.getLogger(__name__)
 BAYROL_HOST = "www.bayrol-poolaccess.de"
 BAYROL_PORT = 8083
 RECONNECT_PERIOD = 5  # seconds, matching JS reconnectPeriod: 5000
+SMART_EASY_OPTIONAL_CONTROL_TOPICS = {"5.184", "5.186", "5.187", "5.188", "5.189"}
+SMART_EASY_DETECTOR_TOPICS = {"5.257", "5.265", "5.266"}
+INTERNAL_GUI_STATE_TOPICS = {"5.76", "5.79"}
+
+
+def _extract_dict_block(text: str, marker: str) -> str:
+    """Extract python dict block body from marker assignment."""
+    match = re.search(rf"{marker}\s*=\s*\{{", text)
+    if not match:
+        return ""
+
+    depth = 1
+    idx = match.end()
+    start = idx
+    while idx < len(text) and depth > 0:
+        if text[idx] == "{":
+            depth += 1
+        elif text[idx] == "}":
+            depth -= 1
+        idx += 1
+
+    return text[start : idx - 1]
+
+
+def _parse_select_topics(block: str) -> dict[str, dict[str, object]]:
+    """Parse select topic metadata from a constants block."""
+    topics: dict[str, dict[str, object]] = {}
+    topic_pattern = re.compile(r'"([0-9]+\.[0-9]+)"\s*:\s*\{')
+    idx = 0
+    while True:
+        topic_match = topic_pattern.search(block, idx)
+        if not topic_match:
+            break
+        topic = topic_match.group(1)
+        obj_start = topic_match.end() - 1
+        cursor = obj_start + 1
+        depth = 1
+        while cursor < len(block) and depth > 0:
+            if block[cursor] == "{":
+                depth += 1
+            elif block[cursor] == "}":
+                depth -= 1
+            cursor += 1
+        obj_text = block[obj_start:cursor]
+        idx = cursor
+
+        if '"entity_type": "select"' not in obj_text:
+            continue
+
+        coefficient = None
+        coefficient_match = re.search(r'"coefficient"\s*:\s*([^,\n]+)', obj_text)
+        if coefficient_match:
+            raw = coefficient_match.group(1).strip()
+            if raw not in {"None", "null"}:
+                try:
+                    coefficient = float(raw)
+                except ValueError:
+                    coefficient = None
+
+        options: list[str] = []
+        options_match = re.search(r'"options"\s*:\s*\[(.*?)\]', obj_text, flags=re.S)
+        if options_match:
+            for line in options_match.group(1).splitlines():
+                line = line.split("#")[0].strip().rstrip(",")
+                if not line:
+                    continue
+                if line.startswith('"') and line.endswith('"'):
+                    options.append(line[1:-1])
+                else:
+                    options.append(str(float(line) if "." in line else int(line)))
+
+        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', obj_text)
+        topics[topic] = {
+            "name": name_match.group(1) if name_match else topic,
+            "options": options,
+            "coefficient": coefficient,
+        }
+
+    return topics
+
+
+def _parse_all_topics(block: str) -> set[str]:
+    """Parse all topic keys from a constants block."""
+    return set(re.findall(r'"([0-9]+\.[0-9]+)"\s*:\s*\{', block))
+
+
+def _parse_automatic_mapping(text: str) -> dict[str, str]:
+    """Parse AUTOMATIC_MQTT_TO_TEXT_MAPPING from const.py text."""
+    block = _extract_dict_block(text, "AUTOMATIC_MQTT_TO_TEXT_MAPPING")
+    mapping = {}
+    for key, value in re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', block):
+        mapping[key] = value
+    return mapping
+
+
+def _load_automatic_salt_inventory() -> tuple[list[str], dict[str, dict[str, object]], dict[str, str]]:
+    """Load Automatic SALT topic inventory from const.py without importing HA modules."""
+    const_path = Path(__file__).resolve().parents[1] / "custom_components" / "bayrol" / "const.py"
+    text = const_path.read_text(encoding="utf-8")
+    automatic_block = _extract_dict_block(text, "SENSOR_TYPES_AUTOMATIC")
+    automatic_salt_block = _extract_dict_block(text, "SENSOR_TYPES_AUTOMATIC_SALT")
+    automatic_topics = _parse_select_topics(automatic_block)
+    automatic_salt_topics = _parse_select_topics(automatic_salt_block)
+    merged_select_topics = {**automatic_topics, **automatic_salt_topics}
+    all_known_topics = sorted(_parse_all_topics(automatic_block) | _parse_all_topics(automatic_salt_block))
+    return all_known_topics, merged_select_topics, _parse_automatic_mapping(text)
+
+
+def _resolve_select_value(raw_value: str, topic_meta: dict[str, object], mapping: dict[str, str]) -> str:
+    """Resolve raw MQTT value to option text as select.py does."""
+    options = [str(option) for option in topic_meta.get("options", [])]
+    display_options = [mapping.get(option, option) for option in options]
+
+    if raw_value in mapping:
+        return mapping[raw_value]
+
+    coefficient = topic_meta.get("coefficient")
+    if coefficient not in (None, -1) and options:
+        try:
+            converted = float(raw_value) / float(coefficient)
+            option_floats = [float(option) for option in options]
+            nearest = min(option_floats, key=lambda candidate: abs(candidate - converted))
+            candidate = str(nearest)
+            if candidate in display_options:
+                return candidate
+        except ValueError:
+            return raw_value
+
+    return raw_value
 
 
 # ---------------------------------------------------------------------------
@@ -261,3 +393,93 @@ async def test_mqtt_subscribe_and_request_topic():
     finally:
         client.loop_stop()
         client.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_mqtt_live_audit_automatic_salt_topics():
+    """Audit Automatic SALT topic coverage and mapping against live broker values."""
+    _require_live_tests_enabled()
+    access_token, device_id = await _fetch_credentials()
+    known_topics, select_topics, automatic_mapping = _load_automatic_salt_inventory()
+    capture_seconds = int(os.getenv("BAYROL_AUDIT_DURATION_SECONDS", "45"))
+
+    connected_event = asyncio.Event()
+    received_by_topic: dict[str, set[str]] = {}
+
+    client, client_id = _create_mqtt_client(access_token)
+
+    def on_connect(client_obj, userdata, flags, reason_code, properties):
+        _LOGGER.info("Connected for audit as %s (reason_code=%s)", client_id, reason_code)
+        if reason_code != 0:
+            return
+        client_obj.subscribe(f"d02/{device_id}/v/#")
+        for topic in known_topics:
+            client_obj.publish(f"d02/{device_id}/g/{topic}", "")
+        connected_event.set()
+
+    def on_message(client_obj, userdata, msg):
+        topic = msg.topic.split("/")[-1]
+        try:
+            payload = json.loads(msg.payload.decode())
+        except json.JSONDecodeError:
+            return
+        value = payload.get("v")
+        if value is None:
+            return
+        received_by_topic.setdefault(topic, set()).add(str(value))
+
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect_async(BAYROL_HOST, BAYROL_PORT, 60)
+    client.loop_start()
+
+    try:
+        await asyncio.wait_for(connected_event.wait(), timeout=15.0)
+        await asyncio.sleep(capture_seconds)
+    finally:
+        client.loop_stop()
+        client.disconnect()
+
+    covered_select_topics = sorted(topic for topic in select_topics if topic in received_by_topic)
+    uncovered_select_topics = sorted(topic for topic in select_topics if topic not in received_by_topic)
+    unknown_topics = sorted(topic for topic in received_by_topic if topic not in known_topics)
+
+    unmapped_values = []
+    for topic, topic_meta in sorted(select_topics.items()):
+        observed = sorted(received_by_topic.get(topic, set()))
+        if not observed:
+            continue
+        display_options = [automatic_mapping.get(option, option) for option in topic_meta.get("options", [])]
+        for raw_value in observed:
+            resolved = _resolve_select_value(raw_value, topic_meta, automatic_mapping)
+            if resolved not in display_options:
+                unmapped_values.append(
+                    {
+                        "topic": topic,
+                        "name": topic_meta.get("name"),
+                        "value": raw_value,
+                        "resolved": resolved,
+                    }
+                )
+
+    report = {
+        "device_id": device_id,
+        "capture_seconds": capture_seconds,
+        "known_topics_total": len(known_topics),
+        "observed_topics_total": len(received_by_topic),
+        "covered_select_topics": covered_select_topics,
+        "uncovered_select_topics": uncovered_select_topics,
+        "unknown_topics": unknown_topics,
+        "unknown_topics_internal_gui_subset": sorted(
+            topic for topic in unknown_topics if topic in INTERNAL_GUI_STATE_TOPICS
+        ),
+        "smart_easy_topics_seen": sorted(
+            topic
+            for topic in received_by_topic
+            if topic in SMART_EASY_OPTIONAL_CONTROL_TOPICS or topic in SMART_EASY_DETECTOR_TOPICS
+        ),
+        "unmapped_select_values": unmapped_values,
+    }
+    _LOGGER.info("Automatic SALT live audit report:\n%s", json.dumps(report, indent=2))
+
+    assert received_by_topic, "Live audit did not receive any MQTT value"

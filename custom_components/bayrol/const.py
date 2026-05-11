@@ -11,9 +11,27 @@ BAYROL_ACCESS_TOKEN = "bayrol_access_token"
 BAYROL_DEVICE_ID = "bayrol_device_id"
 BAYROL_DEVICE_TYPE = "bayrol_device_type"
 BAYROL_APP_LINK_CODE = "bayrol_app_link_code"
+CONF_OPTIONAL_CONTROLS_POLICY = "optional_controls_policy"
+OPTIONAL_CONTROLS_POLICY_AUTO = "auto"
+OPTIONAL_CONTROLS_POLICY_SHOW_ALL = "show_all"
+OPTIONAL_CONTROLS_POLICY_HIDE_ALL = "hide_all"
+OPTIONAL_CONTROLS_POLICY_VALUES = [
+    OPTIONAL_CONTROLS_POLICY_AUTO,
+    OPTIONAL_CONTROLS_POLICY_SHOW_ALL,
+    OPTIONAL_CONTROLS_POLICY_HIDE_ALL,
+]
 
 BAYROL_HOST = "www.bayrol-poolaccess.de"
 BAYROL_PORT = 8083
+
+# Smart&Easy optional controls (available only with external control module/box).
+SMART_EASY_OPTIONAL_CONTROL_TOPICS = {"5.184", "5.186", "5.187", "5.188", "5.189"}
+# Detector topics in order of reliability (reverse-engineered public references).
+SMART_EASY_DETECTOR_TOPICS = ("5.257", "5.265", "5.266")
+SMART_EASY_ENABLED_VALUES = {"19.54", "19.17"}
+SMART_EASY_DISABLED_VALUES = {"19.55", "19.18"}
+# Internal GUI/state topics: keep diagnostic visibility, do not treat as user controls.
+INTERNAL_GUI_STATE_TOPICS = {"5.76", "5.79"}
 
 # MQTT value to display text mapping for Automatic models
 AUTOMATIC_MQTT_TO_TEXT_MAPPING = {
@@ -752,6 +770,7 @@ SENSOR_TYPES_AUTOMATIC = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "select",
+        "capability": "smart_easy_optional",
         "options": [
             "19.315",  # Low
             "19.316",  # Med
@@ -769,6 +788,7 @@ SENSOR_TYPES_AUTOMATIC = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "select",
+        "capability": "smart_easy_optional",
         "options": [
             "19.311",  # Out On
             "19.100",  # Out Off
@@ -782,6 +802,7 @@ SENSOR_TYPES_AUTOMATIC = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "select",
+        "capability": "smart_easy_optional",
         "options": [
             "19.311",  # Out On
             "19.100",  # Out Off
@@ -795,6 +816,7 @@ SENSOR_TYPES_AUTOMATIC = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "select",
+        "capability": "smart_easy_optional",
         "options": [
             "19.311",  # Out On
             "19.100",  # Out Off
@@ -808,6 +830,7 @@ SENSOR_TYPES_AUTOMATIC = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "select",
+        "capability": "smart_easy_optional",
         "options": [
             "19.311",  # Out On
             "19.100",  # Out Off
@@ -986,6 +1009,51 @@ SENSOR_TYPES_AUTOMATIC_SALT = {
         "coefficient": None,
         "unit_of_measurement": None,
         "entity_type": "sensor",
+    },
+    "5.257": {
+        "name": "Smart&Easy Box Used",
+        "device_class": None,
+        "state_class": None,
+        "coefficient": None,
+        "unit_of_measurement": None,
+        "entity_type": "sensor",
+        "capability": "smart_easy_optional",
+    },
+    "5.265": {
+        "name": "Smart&Easy Module Supported",
+        "device_class": None,
+        "state_class": None,
+        "coefficient": None,
+        "unit_of_measurement": None,
+        "entity_type": "sensor",
+        "capability": "smart_easy_optional",
+    },
+    "5.266": {
+        "name": "Smart&Easy Module Used",
+        "device_class": None,
+        "state_class": None,
+        "coefficient": None,
+        "unit_of_measurement": None,
+        "entity_type": "sensor",
+        "capability": "smart_easy_optional",
+    },
+    "5.76": {
+        "name": "Salt Value Status",
+        "device_class": None,
+        "state_class": None,
+        "coefficient": None,
+        "unit_of_measurement": None,
+        "entity_type": "sensor",
+        "capability": "internal_gui_state",
+    },
+    "5.79": {
+        "name": "pH Pump Status (GUI)",
+        "device_class": None,
+        "state_class": None,
+        "coefficient": None,
+        "unit_of_measurement": None,
+        "entity_type": "sensor",
+        "capability": "internal_gui_state",
     },
 }
 

@@ -106,6 +106,21 @@ logger:
 
 Restart Home Assistant and reproduce the issue before collecting logs.
 
+### Device connectivity entity
+
+The integration exposes a dedicated connectivity entity on the Bayrol device:
+
+- `Device Online` (`binary_sensor`, `device_class: connectivity`)
+
+State meaning:
+
+- `on`: Bayrol cloud reports the device as online (`v/1 = 17.4`)
+- `off`: Bayrol cloud reports the device as offline (`v/1 = 17.0`)
+- `unavailable`: local integration is disconnected from Bayrol MQTT broker
+
+This entity is useful in automations and troubleshooting because it separates
+the **remote device runtime status** from the **local MQTT client connection**.
+
 ### Common issues
 
 - **Cannot connect during setup**: verify the App Link Code is valid and not expired.

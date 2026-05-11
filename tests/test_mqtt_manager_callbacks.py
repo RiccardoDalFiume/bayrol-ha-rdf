@@ -88,7 +88,7 @@ class _FakeClient:
 
 
 def _build_manager():
-    fake_hass = SimpleNamespace(loop=SimpleNamespace(call_soon_threadsafe=lambda cb: cb()))
+    fake_hass = SimpleNamespace(loop=SimpleNamespace(call_soon_threadsafe=lambda cb, *args: cb(*args)))
     return BayrolMQTTManager(fake_hass, "device-123", "token-123")
 
 
@@ -139,3 +139,41 @@ def test_on_disconnect_logs_reason_code(caplog):
 
     assert "Unexpected disconnection" in caplog.text
     assert "reason_code=7" in caplog.text
+
+
+def test_topic_1_device_status_updates_device_online_state_and_callbacks():
+    """Topic v/1 payload must update device online/offline state."""
+    manager = _build_manager()
+    updates = []
+    manager.register_device_online_callback(updates.append)
+
+    online_msg = SimpleNamespace(
+        topic=f"d02/{manager.device_id}/v/1",
+        payload=b'{"v":"17.4"}',
+    )
+    manager._on_message(None, None, online_msg)
+
+    offline_msg = SimpleNamespace(
+        topic=f"d02/{manager.device_id}/v/1",
+        payload=b'{"v":"17.0"}',
+    )
+    manager._on_message(None, None, offline_msg)
+
+    unknown_msg = SimpleNamespace(
+        topic=f"d02/{manager.device_id}/v/1",
+        payload=b'{"v":"17.9"}',
+    )
+    manager._on_message(None, None, unknown_msg)
+
+    assert manager.device_online is False
+    assert updates == [True, False]
+
+
+def test_disconnect_marks_device_offline():
+    """Disconnect should mark device state as offline."""
+    manager = _build_manager()
+    manager._set_device_online(True)
+
+    manager._on_disconnect(None, None, None, 1, None)
+
+    assert manager.device_online is False

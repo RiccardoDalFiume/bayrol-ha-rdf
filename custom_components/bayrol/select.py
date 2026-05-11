@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,9 +23,82 @@ from .const import (
     PM5_MQTT_TO_TEXT_MAPPING,
     AUTOMATIC_TEXT_TO_MQTT_MAPPING,
     PM5_TEXT_TO_MQTT_MAPPING,
+    CONF_OPTIONAL_CONTROLS_POLICY,
+    OPTIONAL_CONTROLS_POLICY_AUTO,
+    OPTIONAL_CONTROLS_POLICY_HIDE_ALL,
+    OPTIONAL_CONTROLS_POLICY_SHOW_ALL,
+    SMART_EASY_DETECTOR_TOPICS,
+    SMART_EASY_DISABLED_VALUES,
+    SMART_EASY_ENABLED_VALUES,
+    SMART_EASY_OPTIONAL_CONTROL_TOPICS,
+    INTERNAL_GUI_STATE_TOPICS,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def _detect_smart_easy_optional_controls(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    mqtt_manager,
+    timeout_seconds: float = 8.0,
+) -> tuple[bool, dict[str, Any]]:
+    """Detect whether optional Smart&Easy controls are available."""
+    detector_values: dict[str, str] = {}
+    optional_topics_seen: set[str] = set()
+    first_message_received = asyncio.Event()
+
+    def _on_topic_value(topic: str):
+        def _callback(value: Any) -> None:
+            value_str = str(value)
+            if topic in SMART_EASY_DETECTOR_TOPICS:
+                detector_values[topic] = value_str
+            if topic in SMART_EASY_OPTIONAL_CONTROL_TOPICS:
+                optional_topics_seen.add(topic)
+            first_message_received.set()
+
+        return _callback
+
+    probe_topics = [*SMART_EASY_DETECTOR_TOPICS, *sorted(SMART_EASY_OPTIONAL_CONTROL_TOPICS)]
+    for topic in probe_topics:
+        mqtt_manager.subscribe(topic, _on_topic_value(topic))
+
+    if mqtt_manager.is_connected:
+        for topic in probe_topics:
+            request_topic = f"d02/{config_entry.data[BAYROL_DEVICE_ID]}/g/{topic}"
+            await hass.async_add_executor_job(mqtt_manager.publish, request_topic, "")
+
+    try:
+        await asyncio.wait_for(first_message_received.wait(), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        pass
+
+    detector_enabled = any(value in SMART_EASY_ENABLED_VALUES for value in detector_values.values())
+    detector_disabled = (
+        detector_values
+        and all(value in SMART_EASY_DISABLED_VALUES for value in detector_values.values())
+        and not detector_enabled
+    )
+    include_optional = detector_enabled or bool(optional_topics_seen)
+    if detector_disabled and not optional_topics_seen:
+        include_optional = False
+
+    detection_info = {
+        "policy": OPTIONAL_CONTROLS_POLICY_AUTO,
+        "detector_values": detector_values,
+        "optional_topics_seen": sorted(optional_topics_seen),
+        "include_optional_controls": include_optional,
+        "reason": (
+            "detector_enabled"
+            if detector_enabled
+            else "optional_topics_seen"
+            if optional_topics_seen
+            else "detector_disabled"
+            if detector_disabled
+            else "no_optional_signal"
+        ),
+    }
+    return include_optional, detection_info
 
 
 def _handle_select_value(select, value):
@@ -31,27 +106,41 @@ def _handle_select_value(select, value):
     _LOGGER.debug("Received MQTT value: %s for select: %s", value, select._attr_name)
     _LOGGER.debug("Available options: %s", select._attr_options)
 
+    resolved_option: str | None = None
+
     # Try to find the value in the device-specific mappings and store the TEXT value
     if select._config_entry.data[BAYROL_DEVICE_TYPE] == "PM5 Chlorine":
         if str(value) in PM5_MQTT_TO_TEXT_MAPPING:
-            select._attr_current_option = PM5_MQTT_TO_TEXT_MAPPING[str(value)]
-            _LOGGER.debug("PM5 mapping found: %s -> %s", value, select._attr_current_option)
+            resolved_option = PM5_MQTT_TO_TEXT_MAPPING[str(value)]
+            _LOGGER.debug("PM5 mapping found: %s -> %s", value, resolved_option)
         else:
             # Try coefficient conversion for numeric values
-            _handle_numeric_value(select, value)
+            resolved_option = _handle_numeric_value(select, value)
     elif (
         select._config_entry.data[BAYROL_DEVICE_TYPE] == "Automatic Cl-pH"
         or select._config_entry.data[BAYROL_DEVICE_TYPE] == "Automatic SALT"
     ):
         if str(value) in AUTOMATIC_MQTT_TO_TEXT_MAPPING:
-            select._attr_current_option = AUTOMATIC_MQTT_TO_TEXT_MAPPING[str(value)]
-            _LOGGER.debug("Automatic mapping found: %s -> %s", value, select._attr_current_option)
+            resolved_option = AUTOMATIC_MQTT_TO_TEXT_MAPPING[str(value)]
+            _LOGGER.debug("Automatic mapping found: %s -> %s", value, resolved_option)
         else:
             # Try coefficient conversion for numeric values
-            _handle_numeric_value(select, value)
+            resolved_option = _handle_numeric_value(select, value)
     else:
         _LOGGER.warning("Unknown device type: %s", select._config_entry.data[BAYROL_DEVICE_TYPE])
-        _handle_numeric_value(select, value)
+        resolved_option = _handle_numeric_value(select, value)
+
+    if resolved_option in select.options:
+        select._attr_current_option = resolved_option
+        select._last_unmapped_value = None
+    else:
+        select._last_unmapped_value = str(value)
+        _LOGGER.debug(
+            "Value %s for %s does not match options, keeping previous option %s",
+            value,
+            select._attr_name,
+            select._attr_current_option,
+        )
 
     _LOGGER.debug("Set current_option to: %s", select._attr_current_option)
     if select.hass is not None:
@@ -80,14 +169,15 @@ def _handle_numeric_value(select, value):
                 options = [float(opt) for opt in select._attr_options]
 
             closest_option = min(options, key=lambda x: abs(x - converted_value))
-            select._attr_current_option = str(closest_option)
+            resolved_option = str(closest_option)
             _LOGGER.debug("Found closest option: %s", closest_option)
         else:
             # No coefficient, use value directly
-            select._attr_current_option = str(value)
+            resolved_option = str(value)
     except (ValueError, TypeError) as e:
         _LOGGER.warning("Error converting value %s: %s", value, e)
-        select._attr_current_option = str(value)
+        resolved_option = str(value)
+    return resolved_option
 
 
 async def async_setup_entry(
@@ -102,10 +192,42 @@ async def async_setup_entry(
 
     # Get the entry-specific MQTT manager
     mqtt_manager = hass.data[DOMAIN][config_entry.entry_id]["mqtt_manager"]
+    optional_policy = config_entry.options.get(CONF_OPTIONAL_CONTROLS_POLICY, OPTIONAL_CONTROLS_POLICY_AUTO)
+    optional_runtime_info: dict[str, Any] = {"policy": optional_policy}
+    include_optional_controls = True
+
+    if device_type == "Automatic SALT":
+        if optional_policy == OPTIONAL_CONTROLS_POLICY_HIDE_ALL:
+            include_optional_controls = False
+            optional_runtime_info.update(
+                {
+                    "include_optional_controls": False,
+                    "reason": "policy_hide_all",
+                }
+            )
+        elif optional_policy == OPTIONAL_CONTROLS_POLICY_SHOW_ALL:
+            include_optional_controls = True
+            optional_runtime_info.update(
+                {
+                    "include_optional_controls": True,
+                    "reason": "policy_show_all",
+                }
+            )
+        else:
+            include_optional_controls, detection_info = await _detect_smart_easy_optional_controls(
+                hass,
+                config_entry,
+                mqtt_manager,
+            )
+            optional_runtime_info.update(detection_info)
 
     if device_type == "Automatic SALT":
         for select_type, select_config in SENSOR_TYPES_AUTOMATIC_SALT.items():
             if select_config.get("entity_type") == "select":
+                if select_type in INTERNAL_GUI_STATE_TOPICS:
+                    continue
+                if select_type in SMART_EASY_OPTIONAL_CONTROL_TOPICS and not include_optional_controls:
+                    continue
                 topic = select_type
                 select = BayrolSelect(config_entry, select_type, select_config, topic, mqtt_manager)
                 mqtt_manager.subscribe(topic, lambda v, s=select: _handle_select_value(s, v))
@@ -125,6 +247,7 @@ async def async_setup_entry(
                 mqtt_manager.subscribe(topic, lambda v, s=select: _handle_select_value(s, v))
                 entities.append(select)
 
+    hass.data[DOMAIN][config_entry.entry_id]["optional_controls"] = optional_runtime_info
     async_add_entities(entities)
 
 
@@ -142,6 +265,7 @@ class BayrolSelect(SelectEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_{select_type}"
         self._attr_current_option = None
         self._attr_available = mqtt_manager.is_connected
+        self._last_unmapped_value: str | None = None
 
         # Get options from config and convert to strings
         self._attr_options = [str(opt) for opt in select_config.get("options", [])]
@@ -268,6 +392,13 @@ class BayrolSelect(SelectEntity):
                 )
                 display_options.append(option_str)
         return display_options
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Return extra state attributes for diagnostics in UI."""
+        if self._last_unmapped_value is None:
+            return {}
+        return {"last_unmapped_value": self._last_unmapped_value}
 
     @property
     def device_info(self) -> DeviceInfo:
