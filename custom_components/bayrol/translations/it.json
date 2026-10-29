@@ -1,0 +1,57 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Questo dispositivo Bayrol è già configurato."
+    },
+    "error": {
+      "cannot_connect": "Impossibile connettersi al servizio Bayrol. Riprova.",
+      "invalid_response": "Il servizio Bayrol ha restituito una risposta non valida.",
+      "unknown": "Si è verificato un errore imprevisto. Riprova."
+    },
+    "flow_title": "Bayrol",
+    "step": {
+      "init": {
+        "title": "Gestione dei controlli opzionali",
+        "description": "Scegli come mostrare i controlli opzionali Smart&Easy.",
+        "data": {
+          "optional_controls_policy": "Controlli opzionali Smart&Easy"
+        }
+      },
+      "user": {
+        "title": "Connetti Bayrol",
+        "description": "Inserisci il codice App Link di Bayrol.",
+        "data": {
+          "bayrol_app_link_code": "Codice App Link (A-******)",
+          "bayrol_device_type": "Tipo di dispositivo"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gestione dei controlli opzionali",
+        "description": "Scegli come mostrare i controlli opzionali Smart&Easy.",
+        "data": {
+          "optional_controls_policy": "Controlli opzionali Smart&Easy"
+        }
+      }
+    }
+  },
+  "selector": {
+    "optional_controls_policy": {
+      "options": {
+        "auto": "Automatico (mostra solo i controlli opzionali rilevati)",
+        "show_all": "Mostra tutti i controlli opzionali",
+        "hide_all": "Nascondi tutti i controlli opzionali"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "device_online": {
+        "name": "Dispositivo online"
+      }
+    }
+  }
+}
