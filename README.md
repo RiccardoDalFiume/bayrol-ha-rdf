@@ -1,6 +1,12 @@
 [![Static Badge](https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge&logo=homeassistantcommunitystore&logoColor=white)](https://github.com/hacs/integration) 
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge) 
 ![GitHub Release Date](https://img.shields.io/github/release-date/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge&label=Latest%20Release) [![GitHub Release](https://img.shields.io/github/v/release/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/releases)
+[![License](https://img.shields.io/github/license/RiccardoDalFiume/bayrol-ha-rdf?style=for-the-badge)](LICENSE)
+
+[![HACS validation](https://img.shields.io/github/actions/workflow/status/RiccardoDalFiume/bayrol-ha-rdf/validate.yaml?branch=main&style=flat-square&label=HACS)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/actions/workflows/validate.yaml)
+[![hassfest](https://img.shields.io/github/actions/workflow/status/RiccardoDalFiume/bayrol-ha-rdf/hassfest.yml?branch=main&style=flat-square&label=hassfest)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/actions/workflows/hassfest.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/RiccardoDalFiume/bayrol-ha-rdf/tests.yml?branch=main&style=flat-square&label=tests)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/actions/workflows/tests.yml)
+[![Lint](https://img.shields.io/github/actions/workflow/status/RiccardoDalFiume/bayrol-ha-rdf/lint.yml?branch=main&style=flat-square&label=lint)](https://github.com/RiccardoDalFiume/bayrol-ha-rdf/actions/workflows/lint.yml)
 
 
 # Bayrol Pool Access Integration for Home Assistant
@@ -29,9 +35,22 @@ This custom integration allows you to monitor your Bayrol Pool Access device in 
 
 ### HACS (Recommended)
 
+This fork is not in the HACS default list, so add it as a custom repository.
+Click the button below to open it in HACS directly:
+
+[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=RiccardoDalFiume&repository=bayrol-ha-rdf&category=integration)
+
+Or add it manually:
+
 1. Make sure you have [HACS](https://hacs.xyz/) installed
-2. Search for "Bayrol" and install the integration
-3. Restart Home Assistant
+2. In HACS, open the menu (⋮) → **Custom repositories**
+3. Add `https://github.com/RiccardoDalFiume/bayrol-ha-rdf` with type **Integration**
+4. Search for "Bayrol HA RDF" and install it
+5. Restart Home Assistant
+
+> **Important**: Searching for "Bayrol" in the HACS default list finds the original
+> [0xQuantumHome/bayrol-home-hassistant](https://github.com/0xQuantumHome/bayrol-home-hassistant) integration, not this fork.
+> Both use the `bayrol` domain, so they cannot be installed at the same time: remove the original before installing this one.
 
 ### Manual Installation
 
@@ -43,6 +62,8 @@ This custom integration allows you to monitor your Bayrol Pool Access device in 
 - Minimum supported Home Assistant version: `2025.1.0`
 
 ## Configuration
+
+[![Open your Home Assistant instance and start setting up the Bayrol integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=bayrol)
 
 1. Go to Settings -> Devices & Services
 2. Click "Add Integration" and search for "Bayrol"

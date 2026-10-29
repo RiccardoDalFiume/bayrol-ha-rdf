@@ -1,5 +1,8 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "This Bayrol device is already configured."
+    },
     "error": {
       "cannot_connect": "Failed to connect to Bayrol service. Please try again.",
       "invalid_response": "Bayrol service returned an invalid response.",
