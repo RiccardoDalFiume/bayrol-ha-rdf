@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 import random
 import ssl
-import time
 import threading
 from collections.abc import Callable
 import paho.mqtt.client as paho
@@ -42,7 +41,7 @@ class BayrolMQTTManager:
         self.device_id = device_id
         self.client = None
         self.thread = None
-        self._subscribers = {}
+        self._subscribers: dict[str, list[Callable[[object], None]]] = {}
         self._availability_callbacks = set()
         self._device_online_callbacks: set[Callable[[bool | None], None]] = set()
         self._is_connected = False
@@ -71,7 +70,7 @@ class BayrolMQTTManager:
     @property
     def subscriber_count(self) -> int:
         """Return number of registered subscribers."""
-        return len(self._subscribers)
+        return sum(len(callbacks) for callbacks in self._subscribers.values())
 
     @property
     def latest_topic_values(self) -> dict[str, str]:
@@ -83,17 +82,37 @@ class BayrolMQTTManager:
         """Return latest values received for topics without subscriber."""
         return dict(self._unregistered_topic_values)
 
-    def subscribe(self, topic: str, callback):
-        """Subscribe to a topic with a callback."""
-        self._subscribers[topic] = callback
+    def subscribe(self, topic: str, callback: Callable[[object], None]) -> Callable[[], None]:
+        """Add a callback for a topic and return a function that removes it.
+
+        Several callbacks may share the same topic; each one receives every value.
+        """
+        callbacks = self._subscribers.get(topic)
+        is_new_topic = callbacks is None
+        # Replace the list instead of mutating it, so the MQTT thread never sees a partial update
+        self._subscribers[topic] = [*(callbacks or []), callback]
         if self.client and self.client.is_connected():
-            full_topic = f"d02/{self.device_id}/v/{topic}"
-            self.client.subscribe(full_topic)
-            _LOGGER.debug("Subscribed to %s", full_topic)
-            # Request initial value (publish to 'g' kind)
+            if is_new_topic:
+                full_topic = f"d02/{self.device_id}/v/{topic}"
+                self.client.subscribe(full_topic)
+                _LOGGER.debug("Subscribed to %s", full_topic)
+            # Request initial value (publish to 'g' kind) so the new callback gets data
             request_topic = f"d02/{self.device_id}/g/{topic}"
             self.client.publish(request_topic)
             _LOGGER.debug("Requested initial value via %s", request_topic)
+
+        return lambda: self.unsubscribe(topic, callback)
+
+    def unsubscribe(self, topic: str, callback: Callable[[object], None]) -> None:
+        """Remove a callback for a topic.
+
+        The broker subscription is kept: later values are tracked as unregistered.
+        """
+        callbacks = [cb for cb in self._subscribers.get(topic, []) if cb is not callback]
+        if callbacks:
+            self._subscribers[topic] = callbacks
+        else:
+            self._subscribers.pop(topic, None)
 
     def register_availability_callback(self, callback) -> None:
         """Register a callback for MQTT availability changes."""
@@ -140,8 +159,9 @@ class BayrolMQTTManager:
             _LOGGER.debug("Subscribed to device status: %s", status_topic)
 
             # Re-subscribe and request data for all registered topics
-            # This mirrors JS processPendingRequests() behavior
-            for topic in self._subscribers:
+            # This mirrors JS processPendingRequests() behavior.
+            # Iterate over a snapshot: the HA loop may add topics while this thread runs.
+            for topic in list(self._subscribers):
                 sub_topic = f"d02/{self.device_id}/v/{topic}"
                 client.subscribe(sub_topic)
                 req_topic = f"d02/{self.device_id}/g/{topic}"
@@ -180,9 +200,11 @@ class BayrolMQTTManager:
             else:
                 _LOGGER.debug("Unknown Bayrol device status value on topic 1: %s", value_str)
 
-        if topic in self._subscribers:
-            # Schedule the callback in the event loop
-            self.hass.loop.call_soon_threadsafe(lambda: self._subscribers[topic](value))
+        callbacks = self._subscribers.get(topic)
+        if callbacks:
+            # Schedule the callbacks in the event loop
+            for callback in callbacks:
+                self.hass.loop.call_soon_threadsafe(callback, value)
         else:
             self._unregistered_topic_values[topic] = value_str
             _LOGGER.debug("Received message for unregistered topic: %s", msg.topic)
@@ -234,7 +256,8 @@ class BayrolMQTTManager:
                     break
                 if not self.client.is_connected():
                     _LOGGER.info("MQTT loop ended, waiting before reconnect...")
-                    time.sleep(RECONNECT_PERIOD)
+                    # wait() returns as soon as stop() is called, unlike time.sleep()
+                    self._stop_event.wait(RECONNECT_PERIOD)
                 else:
                     break
             except Exception as e:
@@ -245,7 +268,7 @@ class BayrolMQTTManager:
                     e,
                     RECONNECT_PERIOD,
                 )
-                time.sleep(RECONNECT_PERIOD)
+                self._stop_event.wait(RECONNECT_PERIOD)
 
     def start(self):
         """Start the MQTT manager."""
