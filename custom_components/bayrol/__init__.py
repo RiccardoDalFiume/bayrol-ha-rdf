@@ -11,10 +11,17 @@ from .const import (
     DOMAIN,
     BAYROL_ACCESS_TOKEN,
     BAYROL_DEVICE_ID,
+    CONF_OPTIONAL_CONTROLS_POLICY,
+    OPTIONAL_CONTROLS_POLICY_AUTO,
 )
 from .mqtt_manager import BayrolMQTTManager
 
 _LOGGER = logging.getLogger(__name__)
+
+PLATFORMS = ["sensor", "select", "binary_sensor"]
+
+# Max seconds to wait for the MQTT thread to exit on unload
+MQTT_THREAD_JOIN_TIMEOUT = 1.0
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -27,18 +34,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "mqtt_manager": mqtt_manager,
-        "optional_controls": {"policy": entry.options.get("optional_controls_policy", "auto")},
+        "optional_controls": {
+            "policy": entry.options.get(CONF_OPTIONAL_CONTROLS_POLICY, OPTIONAL_CONTROLS_POLICY_AUTO)
+        },
     }
 
+    # Reload the entry when options change so the new policy is applied
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
     # Forward the setup to the platforms
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "select", "binary_sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
 
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry after an options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "select", "binary_sensor"])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         # Clean up MQTT manager
@@ -48,6 +65,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if mqtt_manager:
                 mqtt_manager.stop()
                 if mqtt_manager.thread:
-                    mqtt_manager.thread.join(timeout=1.0)
+                    # join() blocks, so it must not run in the event loop
+                    await hass.async_add_executor_job(mqtt_manager.thread.join, MQTT_THREAD_JOIN_TIMEOUT)
 
     return unload_ok

@@ -60,18 +60,22 @@ async def _detect_smart_easy_optional_controls(
         return _callback
 
     probe_topics = [*SMART_EASY_DETECTOR_TOPICS, *sorted(SMART_EASY_OPTIONAL_CONTROL_TOPICS)]
-    for topic in probe_topics:
-        mqtt_manager.subscribe(topic, _on_topic_value(topic))
-
-    if mqtt_manager.is_connected:
-        for topic in probe_topics:
-            request_topic = f"d02/{config_entry.data[BAYROL_DEVICE_ID]}/g/{topic}"
-            await hass.async_add_executor_job(mqtt_manager.publish, request_topic, "")
+    unsubscribers = [mqtt_manager.subscribe(topic, _on_topic_value(topic)) for topic in probe_topics]
 
     try:
-        await asyncio.wait_for(first_message_received.wait(), timeout=timeout_seconds)
-    except asyncio.TimeoutError:
-        pass
+        if mqtt_manager.is_connected:
+            for topic in probe_topics:
+                request_topic = f"d02/{config_entry.data[BAYROL_DEVICE_ID]}/g/{topic}"
+                await hass.async_add_executor_job(mqtt_manager.publish, request_topic, "")
+
+        try:
+            await asyncio.wait_for(first_message_received.wait(), timeout=timeout_seconds)
+        except asyncio.TimeoutError:
+            pass
+    finally:
+        # Probe callbacks are temporary: remove them so they don't outlive detection
+        for unsubscribe in unsubscribers:
+            unsubscribe()
 
     detector_enabled = any(value in SMART_EASY_ENABLED_VALUES for value in detector_values.values())
     detector_disabled = (

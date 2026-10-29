@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import ModuleType, SimpleNamespace
 import sys
+import time
 
 
 def _ensure_homeassistant_stubs() -> None:
@@ -86,6 +87,9 @@ class _FakeClient:
         self.published.append(topic)
         return (0, 1)
 
+    def disconnect(self):
+        self.connected = False
+
 
 def _build_manager():
     fake_hass = SimpleNamespace(loop=SimpleNamespace(call_soon_threadsafe=lambda cb, *args: cb(*args)))
@@ -108,7 +112,7 @@ def test_start_configures_client_with_callback_api_v2(monkeypatch):
 def test_on_connect_success_subscribes_and_requests_all_topics():
     """Successful connect must subscribe status + all registered topics."""
     manager = _build_manager()
-    manager._subscribers["4.182"] = lambda _value: None
+    manager.subscribe("4.182", lambda _value: None)
     fake_client = _FakeClient()
 
     manager._on_connect(fake_client, None, None, 0, None)
@@ -177,3 +181,101 @@ def test_disconnect_marks_device_offline():
     manager._on_disconnect(None, None, None, 1, None)
 
     assert manager.device_online is False
+
+
+def _message(manager, topic: str, value: str):
+    return SimpleNamespace(topic=f"d02/{manager.device_id}/v/{topic}", payload=f'{{"v":"{value}"}}'.encode())
+
+
+def test_on_connect_tolerates_topics_added_during_resubscribe():
+    """Topics registered while on_connect iterates must not raise RuntimeError."""
+    manager = _build_manager()
+    manager.subscribe("4.1", lambda _value: None)
+    manager.subscribe("4.2", lambda _value: None)
+
+    class _ReentrantClient(_FakeClient):
+        def subscribe(self, topic):
+            # Simulate the HA loop registering a new topic mid-iteration
+            if topic.endswith("/v/4.1"):
+                manager.subscribe("4.99", lambda _value: None)
+            return super().subscribe(topic)
+
+    fake_client = _ReentrantClient()
+
+    manager._on_connect(fake_client, None, None, 0, None)
+
+    assert f"d02/{manager.device_id}/v/4.2" in fake_client.subscribed
+    assert "4.99" in manager.subscribed_topics
+
+
+def test_multiple_callbacks_on_same_topic_all_receive_value():
+    """A second subscriber must not replace the first one."""
+    manager = _build_manager()
+    first, second = [], []
+    manager.subscribe("4.182", first.append)
+    manager.subscribe("4.182", second.append)
+
+    manager._on_message(None, None, _message(manager, "4.182", "7.2"))
+
+    assert first == ["7.2"]
+    assert second == ["7.2"]
+    assert manager.subscriber_count == 2
+
+
+def test_unsubscribe_removes_only_that_callback():
+    """The function returned by subscribe() must remove only its own callback."""
+    manager = _build_manager()
+    kept, removed = [], []
+    manager.subscribe("4.182", kept.append)
+    unsubscribe = manager.subscribe("4.182", removed.append)
+
+    unsubscribe()
+    manager._on_message(None, None, _message(manager, "4.182", "7.2"))
+
+    assert kept == ["7.2"]
+    assert removed == []
+
+
+def test_unsubscribe_last_callback_marks_topic_unregistered():
+    """Once a topic has no callbacks, its values are tracked as unregistered."""
+    manager = _build_manager()
+    unsubscribe = manager.subscribe("4.182", lambda _value: None)
+
+    unsubscribe()
+    manager._on_message(None, None, _message(manager, "4.182", "7.2"))
+
+    assert "4.182" not in manager.subscribed_topics
+    assert manager.unregistered_topic_values == {"4.182": "7.2"}
+
+
+def test_subscribe_while_connected_subscribes_broker_once_per_topic():
+    """Only the first callback for a topic subscribes on the broker; each one requests a value."""
+    manager = _build_manager()
+    manager.client = _FakeClient()
+
+    manager.subscribe("4.182", lambda _value: None)
+    manager.subscribe("4.182", lambda _value: None)
+
+    assert manager.client.subscribed == [f"d02/{manager.device_id}/v/4.182"]
+    assert manager.client.published == [f"d02/{manager.device_id}/g/4.182"] * 2
+
+
+def test_stop_interrupts_reconnect_wait(monkeypatch):
+    """stop() must end the reconnect loop without waiting the full reconnect period."""
+
+    class _FailingClient(_FakeClient):
+        def connect(self, *_args):
+            raise OSError("broker unreachable")
+
+    monkeypatch.setattr(mqtt_manager.paho, "Client", _FailingClient)
+    monkeypatch.setattr(mqtt_manager, "RECONNECT_PERIOD", 30)
+    manager = _build_manager()
+
+    manager.start()
+    time.sleep(0.05)  # let the thread reach the reconnect wait
+    started = time.monotonic()
+    manager.stop()
+    manager.thread.join(timeout=2)
+
+    assert not manager.thread.is_alive()
+    assert time.monotonic() - started < 2
